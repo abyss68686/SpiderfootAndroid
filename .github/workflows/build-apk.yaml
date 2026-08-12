@@ -61,6 +61,11 @@ jobs:
         working-directory: SpiderFootAndroid
         run: gradle :app:assembleDebug -PpythonCommand="$(command -v python3.10)" --stacktrace
 
+      - name: Verify APK signature and alignment
+        working-directory: SpiderFootAndroid
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
