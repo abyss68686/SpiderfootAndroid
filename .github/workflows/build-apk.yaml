@@ -123,7 +123,7 @@ jobs:
       - name: Test embedded SpiderFoot core
         run: |
           python3.10 -m compileall -q app/src/main/python
-          python3.10 -m pip install -c app/src/main/python/constraints-android.txt -r app/src/main/python/requirements-android.txt
+          python3.10 -m pip install -r app/src/main/python/requirements-android.txt
           python3.10 tools/smoke_test.py
 
       - name: Build community preview APK

@@ -26,7 +26,8 @@ android {
 
     buildTypes {
         debug {
-            // Preview certificate, but no debuggable installed process.
+            // Community preview builds use the Android debug certificate, but the
+            // installed app itself must not expose a debuggable process or API keys.
             isDebuggable = false
         }
         release {
@@ -60,10 +61,7 @@ chaquopy {
         buildPython(pythonCommand)
 
         pip {
-            install(
-                "-c", "src/main/python/constraints-android.txt",
-                "-r", "src/main/python/requirements-android.txt"
-            )
+            install("-r", "src/main/python/requirements-android.txt")
         }
 
         // SpiderFoot discovers modules by listing their .py files at runtime.

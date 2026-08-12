@@ -1,4 +1,5 @@
 # SpiderFoot 4.0.0 requirements, resolved for Chaquopy Python 3.10/arm64-v8a.
+-c constraints-android.txt
 adblockparser==0.7
 dnspython==2.3.0
 ExifRead==2.3.2
