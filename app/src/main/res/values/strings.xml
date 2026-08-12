@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AbyssSpiderfoot</string>
+    <string name="server_starting">SpiderFoot wird lokal gestartet …</string>
+    <string name="server_waiting">Weboberfläche auf 127.0.0.1:1488 wird vorbereitet.</string>
+    <string name="server_retry">Erneut versuchen</string>
+    <string name="notification_channel">AbyssSpiderfoot-Scans</string>
+    <string name="notification_running">SpiderFoot läuft lokal auf Port 1488</string>
+    <string name="notification_starting">SpiderFoot wird gestartet</string>
+    <string name="notification_stop">Beenden</string>
+</resources>
