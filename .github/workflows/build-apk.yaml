@@ -21,6 +21,7 @@ jobs:
         run: |
           echo "eb823faa141ca859ec5bf84f841a2044fba97fdd644b7b5b88dca6768331af90  SpiderFootAndroid-4.0.0-ci-source.zip" | sha256sum --check --strict
           unzip -q SpiderFootAndroid-4.0.0-ci-source.zip
+          sed -i '/^ipaddr==2\.2\.0$/d' SpiderFootAndroid/app/src/main/python/requirements-android.txt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
