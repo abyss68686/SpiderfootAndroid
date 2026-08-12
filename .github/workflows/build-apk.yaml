@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build and release AbyssSpiderfoot
 
 on:
   workflow_dispatch:
@@ -6,26 +6,93 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: abyssspiderfoot-main
+  cancel-in-progress: false
+
+env:
+  APP_VERSION: 0.1.0-beta.1
+  RELEASE_TAG: v0.1.0-beta.1
+  APK_NAME: AbyssSpiderfoot-0.1.0-beta.1-arm64-preview.apk
 
 jobs:
-  build:
+  prepare_source:
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, '[prepare-community]')
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
 
     steps:
-      - name: Check out build bundle
+      - name: Check out private build bundle
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Verify and extract Android source
+      - name: Verify and publish readable source tree
         run: |
           echo "eb823faa141ca859ec5bf84f841a2044fba97fdd644b7b5b88dca6768331af90  SpiderFootAndroid-4.0.0-ci-source.zip" | sha256sum --check --strict
           unzip -q SpiderFootAndroid-4.0.0-ci-source.zip
+
           sed -i -E '/^(ipaddr==2\.2\.0|pygexf==0\.2\.2)$/d' SpiderFootAndroid/app/src/main/python/requirements-android.txt
           sed -i 's/^python-whois==0\.7\.3$/python-whois==0.9.6/' SpiderFootAndroid/app/src/main/python/requirements-android.txt
           sed -i 's/^python-docx==0\.8\.11$/python-docx==1.2.0/' SpiderFootAndroid/app/src/main/python/requirements-android.txt
           sed -i 's/^python-pptx==0\.6\.21$/python-pptx==0.6.23/' SpiderFootAndroid/app/src/main/python/requirements-android.txt
           sed -i 's/WebView\.setWebContentsDebuggingEnabled(BuildConfig\.DEBUG);/WebView.setWebContentsDebuggingEnabled(false);/' SpiderFootAndroid/app/src/main/java/de/steve/spiderfoot/MainActivity.java
+          sed -i 's/<string name="app_name">SpiderFoot Android<\/string>/<string name="app_name">AbyssSpiderfoot<\/string>/' SpiderFootAndroid/app/src/main/res/values/strings.xml
+          sed -i 's/<string name="notification_channel">SpiderFoot-Scans<\/string>/<string name="notification_channel">AbyssSpiderfoot-Scans<\/string>/' SpiderFootAndroid/app/src/main/res/values/strings.xml
+          sed -i 's/versionName = "4.0.0-android1"/versionName = "0.1.0-beta.1"/' SpiderFootAndroid/app/build.gradle.kts
+          mv constraints-android.txt SpiderFootAndroid/app/src/main/python/constraints-android.txt
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gradle_file = Path("SpiderFootAndroid/app/build.gradle.kts")
+          text = gradle_file.read_text(encoding="utf-8")
+          text = text.replace(
+              "    buildTypes {\n        release {",
+              "    buildTypes {\n"
+              "        debug {\n"
+              "            // Preview certificate, but no debuggable installed process.\n"
+              "            isDebuggable = false\n"
+              "        }\n"
+              "        release {",
+          )
+          text = text.replace(
+              '            install("-r", "src/main/python/requirements-android.txt")',
+              '            install(\n'
+              '                "-c", "src/main/python/constraints-android.txt",\n'
+              '                "-r", "src/main/python/requirements-android.txt"\n'
+              '            )',
+          )
+          gradle_file.write_text(text, encoding="utf-8")
+          PY
+
+          rsync -a --exclude='.github' --exclude='.gitignore' --exclude='README.md' SpiderFootAndroid/ ./
+          rm -r -- SpiderFootAndroid
+          git rm -f -- SpiderFootAndroid-4.0.0-ci-source.zip build-apk.yaml
+
+          test "$(grep -c 'AbyssSpiderfoot' app/src/main/res/values/strings.xml)" -ge 2
+          test "$(grep -c 'constraints-android.txt' app/build.gradle.kts)" -eq 1
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "[release] AbyssSpiderfoot 0.1.0-beta.1"
+          git push origin HEAD:main
+
+  build:
+    needs: prepare_source
+    if: always() && (needs.prepare_source.result == 'success' || needs.prepare_source.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out community source
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -38,7 +105,9 @@ jobs:
         with:
           python-version: "3.10"
           cache: pip
-          cache-dependency-path: SpiderFootAndroid/app/src/main/python/requirements-android.txt
+          cache-dependency-path: |
+            app/src/main/python/requirements-android.txt
+            app/src/main/python/constraints-android.txt
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -52,24 +121,43 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: Test embedded SpiderFoot core
-        working-directory: SpiderFootAndroid
         run: |
-          python3.10 -m pip install -r app/src/main/python/requirements-android.txt
+          python3.10 -m compileall -q app/src/main/python
+          python3.10 -m pip install -c app/src/main/python/constraints-android.txt -r app/src/main/python/requirements-android.txt
           python3.10 tools/smoke_test.py
 
-      - name: Build installable debug APK
-        working-directory: SpiderFootAndroid
+      - name: Build community preview APK
         run: gradle :app:assembleDebug -PpythonCommand="$(command -v python3.10)" --stacktrace
 
-      - name: Verify APK signature and alignment
-        working-directory: SpiderFootAndroid
+      - name: Verify and name APK
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload APK
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+          sha256sum "$APK_NAME" > SHA256SUMS
+
+      - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SpiderFoot-4.0.0-Android-arm64
-          path: SpiderFootAndroid/app/build/outputs/apk/debug/app-debug.apk
+          name: AbyssSpiderfoot-${{ env.APP_VERSION }}-arm64-preview
+          path: |
+            ${{ env.APK_NAME }}
+            SHA256SUMS
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish GitHub community pre-release
+        if: needs.prepare_source.result == 'success' || startsWith(github.event.head_commit.message, '[release]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          target_commit="$(git rev-parse HEAD)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_NAME" SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK_NAME" SHA256SUMS \
+              --title "AbyssSpiderfoot 0.1.0 beta 1" \
+              --notes-file RELEASE_NOTES.md \
+              --prerelease \
+              --target "$target_commit"
+          fi
