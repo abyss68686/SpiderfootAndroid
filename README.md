@@ -14,7 +14,7 @@ WebView. No external desktop server is required.
 ## Download
 
 The latest tested community build is available under
-[Releases](https://github.com/abyss68686/AbyssSpiderfoot/releases).
+[Releases](https://github.com/abyss68686/SpiderfootAndroid/releases).
 
 The first `0.1.0-beta.1` preview is ARM64-only and uses an Android preview
 certificate. A later stable release will use a permanent project signing key.
